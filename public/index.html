@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Battle - Vergelijk AI's</title>
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #101322;
+      color: white;
+    }
+
+    header {
+      text-align: center;
+      padding: 35px 15px;
+      background: linear-gradient(120deg, #5535d9, #087cbd);
+    }
+
+    h1 { margin: 0; font-size: 42px; }
+    header p { color: #e3e9ff; }
+
+    main {
+      max-width: 1200px;
+      margin: auto;
+      padding: 25px 15px;
+    }
+
+    .question {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 25px;
+    }
+
+    input {
+      flex: 1;
+      padding: 16px;
+      border: 1px solid #444b68;
+      border-radius: 10px;
+      background: #20263c;
+      color: white;
+      font-size: 16px;
+      min-width: 0;
+    }
+
+    button {
+      padding: 14px 22px;
+      border: 0;
+      border-radius: 10px;
+      background: #7658ff;
+      color: white;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    button:disabled { opacity: .5; cursor: wait; }
+
+    #status {
+      color: #b8c4e8;
+      margin-bottom: 18px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+      gap: 15px;
+    }
+
+    .card {
+      background: #1c2338;
+      border: 1px solid #343d5d;
+      border-radius: 14px;
+      padding: 18px;
+      min-height: 190px;
+    }
+
+    .card h2 { margin-top: 0; color: #a99aff; }
+    .answer { white-space: pre-wrap; line-height: 1.55; }
+    .error { color: #ffaaa8; }
+
+    .vote {
+      margin-top: 15px;
+      background: #293453;
+      width: 100%;
+    }
+
+    #winner {
+      margin-top: 25px;
+      padding: 20px;
+      background: #202b45;
+      border-radius: 12px;
+      text-align: center;
+    }
+
+    @media(max-width: 550px) {
+      .question { flex-direction: column; }
+      h1 { font-size: 32px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>⚔️ AI BATTLE</h1>
+    <p>Vijf AI's. Eén vraag. Wie geeft het beste antwoord?</p>
+  </header>
+
+  <main>
+    <form class="question" id="questionForm">
+      <input id="question" maxlength="4000"
+        placeholder="Stel een vraag aan alle AI's..." required>
+      <button id="send" type="submit">Start Battle!</button>
+    </form>
+
+    <div id="status">Stel een vraag om de battle te beginnen.</div>
+
+    <section class="grid" id="results">
+      <article class="card"><h2>ChatGPT</h2><p>Wacht op jouw vraag...</p></article>
+      <article class="card"><h2>Gemini</h2><p>Wacht op jouw vraag...</p></article>
+      <article class="card"><h2>Claude</h2><p>Wacht op jouw vraag...</p></article>
+      <article class="card"><h2>Grok</h2><p>Wacht op jouw vraag...</p></article>
+      <article class="card"><h2>DeepSeek</h2><p>Wacht op jouw vraag...</p></article>
+    </section>
+
+    <section id="winner">
+      <h2>🏆 Welke AI wint?</h2>
+      <p id="votes">Nog niemand heeft gestemd.</p>
+    </section>
+  </main>
+
+  <script>
+    const form = document.getElementById("questionForm");
+    const input = document.getElementById("question");
+    const send = document.getElementById("send");
+    const results = document.getElementById("results");
+    const status = document.getElementById("status");
+    const votes = {};
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const question = input.value.trim();
+      if (!question) return;
+
+      send.disabled = true;
+      status.textContent = "De AI's denken na...";
+      results.innerHTML = "";
+
+      try {
+        const response = await fetch("/api/battle", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ question })
+        });
+
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Er ging iets mis.");
+
+        data.results.forEach((item) => {
+          const card = document.createElement("article");
+          card.className = "card";
+
+          const title = document.createElement("h2");
+          title.textContent = item.name;
+
+          const answer = document.createElement("p");
+          answer.className = "answer" + (item.error ? " error" : "");
+          answer.textContent = item.answer;
+
+          card.append(title, answer);
+
+          if (!item.error) {
+            const vote = document.createElement("button");
+            vote.className = "vote";
+            vote.textContent = "🏆 Stem op " + item.name;
+            vote.addEventListener("click", () => {
+              votes[item.name] = (votes[item.name] || 0) + 1;
+              const sorted = Object.entries(votes).sort((a,b) => b[1] - a[1]);
+              document.getElementById("votes").textContent =
+                sorted.map(([name, count]) => name + ": " + count + " stemmen").join(" | ");
+            });
+            card.append(vote);
+          }
+
+          results.append(card);
+        });
+
+        status.textContent = "Battle klaar! Vergelijk de antwoorden en stem op je favoriet.";
+      } catch (error) {
+        status.textContent = "Fout: " + error.message;
+      } finally {
+        send.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
