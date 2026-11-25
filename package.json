@@ -1,0 +1,13 @@
+{
+  "name": "ai-battle-live",
+  "version": "1.0.0",
+  "description": "Vergelijk antwoorden van verschillende AI-chatbots",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "dotenv": "^16.4.7"
+  }
+}
