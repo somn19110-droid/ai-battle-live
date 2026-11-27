@@ -1,3 +1,4 @@
+
 const express = require("express");
 require("dotenv").config();
 
@@ -7,91 +8,63 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json({ limit: "20kb" }));
 app.use(express.static("public"));
 
+const OPENROUTER_URL =
+  "https://openrouter.ai/api/v1/chat/completions";
+
 const providers = [
   {
     name: "ChatGPT",
-    key: "OPENAI_API_KEY",
-    model: process.env.OPENAI_MODEL || "gpt-4.1-mini",
-    url: "https://api.openai.com/v1/chat/completions",
-    type: "openai"
+    model: "openai/gpt-4.1-mini"
   },
   {
     name: "Gemini",
-    key: "GEMINI_API_KEY",
-    model: process.env.GEMINI_MODEL || "gemini-2.5-flash",
-    url: "https://generativelanguage.googleapis.com/v1beta/models/",
-    type: "gemini"
+    model: "google/gemini-2.5-flash"
   },
   {
     name: "Claude",
-    key: "ANTHROPIC_API_KEY",
-    model: process.env.CLAUDE_MODEL || "claude-sonnet-4-5",
-    url: "https://api.anthropic.com/v1/messages",
-    type: "claude"
+    model: "anthropic/claude-sonnet-4.5"
   },
   {
     name: "Grok",
-    key: "XAI_API_KEY",
-    model: process.env.GROK_MODEL || "grok-3-mini",
-    url: "https://api.x.ai/v1/chat/completions",
-    type: "openai"
+    model: "x-ai/grok-3-mini"
   },
   {
     name: "DeepSeek",
-    key: "DEEPSEEK_API_KEY",
-    model: process.env.DEEPSEEK_MODEL || "deepseek-chat",
-    url: "https://api.deepseek.com/chat/completions",
-    type: "openai"
+    model: "deepseek/deepseek-chat"
   }
 ];
 
 async function askAI(provider, question) {
-  const apiKey = process.env[provider.key];
+  const apiKey = process.env.OPENROUTER_API_KEY;
 
   if (!apiKey) {
     return {
       name: provider.name,
-      answer: "Nog niet verbonden. De API-sleutel ontbreekt.",
+      answer: "OpenRouter API-sleutel ontbreekt op Render.",
       error: true
     };
   }
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 45000);
-
   try {
-    let url = provider.url;
-    let headers = {
-      "Content-Type": "application/json"
-    };
-    let body;
-
-    if (provider.type === "gemini") {
-      url += `${provider.model}:generateContent?key=${apiKey}`;
-      body = {
-        contents: [{ parts: [{ text: question }] }]
-      };
-    } else if (provider.type === "claude") {
-      headers["x-api-key"] = apiKey;
-      headers["anthropic-version"] = "2023-06-01";
-      body = {
-        model: provider.model,
-        max_tokens: 1500,
-        messages: [{ role: "user", content: question }]
-      };
-    } else {
-      headers.Authorization = `Bearer ${apiKey}`;
-      body = {
-        model: provider.model,
-        messages: [{ role: "user", content: question }]
-      };
-    }
-
-    const response = await fetch(url, {
+    const response = await fetch(OPENROUTER_URL, {
       method: "POST",
-      headers,
-      body: JSON.stringify(body),
-      signal: controller.signal
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://ai-battle-live.onrender.com",
+        "X-Title": "AI Battle Live"
+      },
+      body: JSON.stringify({
+        model: provider.model,
+        messages: [
+          {
+            role: "user",
+            content: question
+          }
+        ],
+        max_tokens: 1500
+      }),
+      signal: AbortSignal.timeout(60000)
     });
 
     const data = await response.json();
@@ -99,45 +72,43 @@ async function askAI(provider, question) {
     if (!response.ok) {
       throw new Error(
         data.error?.message ||
-        data.message ||
-        `API-fout (${response.status})`
+        `OpenRouter fout: ${response.status}`
       );
     }
 
-    let answer = "";
+    const answer =
+      data.choices?.[0]?.message?.content;
 
-    if (provider.type === "gemini") {
-      answer =
-        data.candidates?.[0]?.content?.parts
-          ?.map(part => part.text || "")
-          .join("") || "Geen antwoord ontvangen.";
-    } else if (provider.type === "claude") {
-      answer =
-        data.content?.map(part => part.text || "").join("") ||
-        "Geen antwoord ontvangen.";
-    } else {
-      answer =
-        data.choices?.[0]?.message?.content ||
-        "Geen antwoord ontvangen.";
+    if (!answer) {
+      throw new Error("Geen antwoord ontvangen.");
     }
 
     return {
       name: provider.name,
-      answer,
+      answer: typeof answer === "string"
+        ? answer
+        : answer.map(part => part.text || "").join(""),
       error: false
     };
+
   } catch (error) {
     return {
       name: provider.name,
-      answer: error.name === "AbortError"
+      answer: error.name === "TimeoutError"
         ? "De AI reageerde niet op tijd."
         : error.message,
       error: true
     };
-  } finally {
-    clearTimeout(timeout);
   }
 }
+
+app.get("/api/health", (req, res) => {
+  res.json({
+    status: "online",
+    apiKeyConfigured: Boolean(process.env.OPENROUTER_API_KEY),
+    models: providers.map(p => p.name)
+  });
+});
 
 app.post("/api/battle", async (req, res) => {
   const question = req.body?.question;
