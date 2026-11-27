@@ -8,29 +8,27 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json({ limit: "20kb" }));
 app.use(express.static("public"));
 
-const OPENROUTER_URL =
-  "https://openrouter.ai/api/v1/chat/completions";
-
+// Alle vijf modellen zijn gratis OpenRouter-modellen.
 const providers = [
   {
-    name: "ChatGPT",
-    model: "openai/gpt-4.1-mini"
+    name: "Nemotron 3 Ultra",
+    model: "nvidia/nemotron-3-ultra-550b-a55b:free"
   },
   {
-    name: "Gemini",
-    model: "google/gemini-2.5-flash"
+    name: "ERNIE 5.5 Flash",
+    model: "baidu/ernie-5.5-flash-preview:free"
   },
   {
-    name: "Claude",
-    model: "anthropic/claude-sonnet-4.5"
+    name: "Nemotron 3.5 Super VL",
+    model: "nvidia/nemotron-3.5-super-vl:free"
   },
   {
-    name: "Grok",
-    model: "x-ai/grok-3-mini"
+    name: "Ling 3.2 Flash",
+    model: "inclusionai/ling-3.2-flash:free"
   },
   {
-    name: "DeepSeek",
-    model: "deepseek/deepseek-chat"
+    name: "Particle 1",
+    model: "particle-ai/particle-1:free"
   }
 ];
 
@@ -40,44 +38,45 @@ async function askAI(provider, question) {
   if (!apiKey) {
     return {
       name: provider.name,
-      answer: "OpenRouter API-sleutel ontbreekt op Render.",
+      answer: "OpenRouter API-sleutel ontbreekt.",
       error: true
     };
   }
 
   try {
-    const response = await fetch(OPENROUTER_URL, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-        "HTTP-Referer": "https://ai-battle-live.onrender.com",
-        "X-Title": "AI Battle Live"
-      },
-      body: JSON.stringify({
-        model: provider.model,
-        messages: [
-          {
-            role: "user",
-            content: question
-          }
-        ],
-        max_tokens: 1500
-      }),
-      signal: AbortSignal.timeout(60000)
-    });
+    const response = await fetch(
+      "https://openrouter.ai/api/v1/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+          "HTTP-Referer": "https://ai-battle-live.onrender.com",
+          "X-Title": "AI Battle Live"
+        },
+        body: JSON.stringify({
+          model: provider.model,
+          messages: [
+            {
+              role: "user",
+              content: question
+            }
+          ],
+          max_tokens: 1200
+        }),
+        signal: AbortSignal.timeout(60000)
+      }
+    );
 
     const data = await response.json();
 
     if (!response.ok) {
       throw new Error(
-        data.error?.message ||
-        `OpenRouter fout: ${response.status}`
+        data.error?.message || `API-fout ${response.status}`
       );
     }
 
-    const answer =
-      data.choices?.[0]?.message?.content;
+    const answer = data.choices?.[0]?.message?.content;
 
     if (!answer) {
       throw new Error("Geen antwoord ontvangen.");
@@ -95,7 +94,7 @@ async function askAI(provider, question) {
     return {
       name: provider.name,
       answer: error.name === "TimeoutError"
-        ? "De AI reageerde niet op tijd."
+        ? "Het model reageerde niet op tijd."
         : error.message,
       error: true
     };
@@ -106,7 +105,7 @@ app.get("/api/health", (req, res) => {
   res.json({
     status: "online",
     apiKeyConfigured: Boolean(process.env.OPENROUTER_API_KEY),
-    models: providers.map(p => p.name)
+    models: providers.map(provider => provider.name)
   });
 });
 
